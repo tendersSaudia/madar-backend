@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, PORT = 3000 } = process.env;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !ANTHROPIC_API_KEY) {
@@ -16,8 +19,9 @@ const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public'))); // يقدّم public/index.html على نفس النطاق (بلا مشاكل CORS)
 
-const MODEL = 'claude-sonnet-5'; // للإنتاج: ثبّت نسخة محددة بدل الاسم المستعار، راجع docs.claude.com/en/docs/about-claude/models/overview
+const MODEL = 'claude-sonnet-5'; // للإنتاج: ثبّت نسخة محددة، راجع docs.claude.com/en/docs/about-claude/models/overview
 
 // ---------------------------------------------------------------------------
 // طبقة النماذج: استدعاء Claude فعليًا
@@ -71,6 +75,35 @@ async function runStage(runId, stageKey, inputPayload, fn) {
     throw e;
   }
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/setup — ينشئ منظمة + علامة + حملة بطلب واحد (بديل الإدخال اليدوي)
+// ---------------------------------------------------------------------------
+app.post('/api/setup', async (req, res) => {
+  const { orgName, brandName, campaignName, goal, targetAudience, market } = req.body;
+  if (!orgName || !brandName || !campaignName || !goal) {
+    return res.status(400).json({ error: 'orgName, brandName, campaignName, goal مطلوبة' });
+  }
+  try {
+    const { data: org, error: orgErr } = await db.from('organizations').insert({ name: orgName }).select().single();
+    if (orgErr) throw orgErr;
+
+    const { data: brand, error: brandErr } = await db.from('brands')
+      .insert({ organization_id: org.id, name: brandName }).select().single();
+    if (brandErr) throw brandErr;
+
+    const { data: campaign, error: campErr } = await db.from('campaigns')
+      .insert({
+        brand_id: brand.id, name: campaignName, goal,
+        target_audience: targetAudience || null, market: market || null, status: 'active',
+      }).select().single();
+    if (campErr) throw campErr;
+
+    res.json({ organizationId: org.id, brandId: brand.id, campaignId: campaign.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // POST /api/campaigns/:campaignId/run — ينفّذ الحلقة كاملة فعليًا
@@ -134,7 +167,7 @@ app.post('/api/campaigns/:campaignId/run', async (req, res) => {
 
     await db.from('pipeline_runs').update({ status: 'pending_approval', completed_at: new Date().toISOString() }).eq('id', run.id);
 
-    res.json({ runId: run.id, brief: production, analytics, optimization, decision });
+    res.json({ runId: run.id, brandIntel, marketIntel, hub, decision, strategy, creative, media, brief: production, analytics, optimization });
   } catch (e) {
     await db.from('pipeline_runs').update({ status: 'failed', completed_at: new Date().toISOString() }).eq('id', run.id);
     res.status(500).json({ error: e.message, runId: run.id });
@@ -142,16 +175,47 @@ app.post('/api/campaigns/:campaignId/run', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /api/runs/:runId — لعرض تفاصيل تشغيلة كاملة (تُستخدم من لوحة التحكم)
+// ---------------------------------------------------------------------------
+app.get('/api/runs/:runId', async (req, res) => {
+  const { runId } = req.params;
+  const [{ data: run }, { data: stages }, { data: assets }] = await Promise.all([
+    db.from('pipeline_runs').select('*').eq('id', runId).single(),
+    db.from('pipeline_stages').select('*').eq('run_id', runId),
+    db.from('campaign_assets').select('*').eq('run_id', runId),
+  ]);
+  if (!run) return res.status(404).json({ error: 'run not found' });
+  res.json({ run, stages, assets });
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/runs/:runId/approve — طبقة الحوكمة: موافقة بشرية إلزامية
+// يقبل بريد المُوافِق مباشرة بدل UUID مستخدم جاهز، وينشئ المستخدم تلقائيًا إن لم يوجد
 // ---------------------------------------------------------------------------
 app.post('/api/runs/:runId/approve', async (req, res) => {
   const { runId } = req.params;
-  const { approvedBy, notes } = req.body;
-  if (!approvedBy) return res.status(400).json({ error: 'approvedBy (user id) required' });
+  const { approverEmail, approverName, notes } = req.body;
+  if (!approverEmail) return res.status(400).json({ error: 'approverEmail مطلوب' });
 
-  await db.from('approvals').insert({ run_id: runId, approved_by: approvedBy, decision: 'approved', notes });
-  await db.from('pipeline_runs').update({ status: 'approved' }).eq('id', runId);
-  res.json({ ok: true });
+  try {
+    const { data: run } = await db.from('pipeline_runs').select('*, campaigns(brand_id, brands(organization_id))').eq('id', runId).single();
+    if (!run) return res.status(404).json({ error: 'run not found' });
+    const organizationId = run.campaigns.brands.organization_id;
+
+    let { data: user } = await db.from('users').select('*').eq('email', approverEmail).maybeSingle();
+    if (!user) {
+      const { data: newUser, error: userErr } = await db.from('users')
+        .insert({ organization_id: organizationId, email: approverEmail, full_name: approverName || approverEmail }).select().single();
+      if (userErr) throw userErr;
+      user = newUser;
+    }
+
+    await db.from('approvals').insert({ run_id: runId, approved_by: user.id, decision: 'approved', notes });
+    await db.from('pipeline_runs').update({ status: 'approved' }).eq('id', runId);
+    res.json({ ok: true, approvedBy: user.id });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
