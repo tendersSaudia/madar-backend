@@ -83,6 +83,7 @@
     </div>
     <button class="btn btn-primary" id="approveBtn">✅ الموافقة والنشر</button>
     <button class="btn btn-ghost" id="downloadBtn">⬇️ تنزيل البريف</button>
+    <button class="btn btn-ghost" id="emailBtn">✉️ إرسال عبر البريد</button>
     <div id="approvedTag" style="margin-top:10px;"></div>
   </div>
 </div>
@@ -171,12 +172,22 @@ document.getElementById('approveBtn').addEventListener('click', async () => {
 document.getElementById('downloadBtn').addEventListener('click', () => {
   if(!lastBrief) return;
   const blob = new Blob([lastBrief], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = 'brief-campaign.txt';
+  document.body.appendChild(a);
   a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+});
+
+document.getElementById('emailBtn').addEventListener('click', () => {
+  if(!lastBrief) { alert('لا يوجد بريف جاهز بعد — شغّل الحلقة أولًا.'); return; }
+  const subject = encodeURIComponent('بريف حملة — مدار');
+  const body = encodeURIComponent(lastBrief);
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
 });
 </script>
 </body>
 </html>
-
