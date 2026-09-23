@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY, PORT = 3000 } = process.env;
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEEPSEEK_API_KEY, PORT = 3000 } = process.env;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !ANTHROPIC_API_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !DEEPSEEK_API_KEY) {
   console.error('انقص أحد المتغيرات في .env — راجع .env.example');
   process.exit(1);
 }
@@ -21,31 +21,31 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'))); // يقدّم public/index.html على نفس النطاق (بلا مشاكل CORS)
 
-const MODEL = 'claude-sonnet-5'; // للإنتاج: ثبّت نسخة محددة، راجع docs.claude.com/en/docs/about-claude/models/overview
+const MODEL = 'deepseek-chat'; // نموذج المحادثة العام في DeepSeek — راجع api-docs.deepseek.com لأي تحديثات
 
 // ---------------------------------------------------------------------------
-// طبقة النماذج: استدعاء Claude فعليًا
+// طبقة النماذج: استدعاء DeepSeek فعليًا (صيغة متوافقة مع OpenAI)
 // ---------------------------------------------------------------------------
 async function askClaude(prompt, { json = false, maxTokens = 400 } = {}) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
+      authorization: `Bearer ${DEEPSEEK_API_KEY}`,
     },
     body: JSON.stringify({
       model: MODEL,
       max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }],
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Anthropic API error ${res.status}: ${errText}`);
+    throw new Error(`DeepSeek API error ${res.status}: ${errText}`);
   }
   const data = await res.json();
-  const text = data.content.map((b) => (b.type === 'text' ? b.text : '')).join('\n').trim();
+  const text = (data.choices?.[0]?.message?.content || '').trim();
   if (json) {
     const match = text.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
     return JSON.parse(match ? match[0] : text);
