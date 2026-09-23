@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>مدار — لوحة التشغيل الفعلية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@600;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#0A0F1A; --card:#101A2E; --ink:#EDEFF5; --muted:rgba(237,239,245,0.66); --line:rgba(237,239,245,0.14);
+         --blue:#4C8FD1; --purple:#9C8FE0; --teal:#38B592; --coral:#E08A4C; --gray:#6B7280; }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans Arabic',sans-serif; line-height:1.7;}
+  h1,h2,h3{font-family:'Tajawal',sans-serif;}
+  .wrap{max-width:820px; margin:0 auto; padding:28px 20px 60px;}
+  h1{font-size:1.4rem; margin:0 0 6px;}
+  .sub{color:var(--muted); font-size:0.92rem; margin:0 0 26px;}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:20px;}
+  .panel h2{font-size:1rem; margin:0 0 14px;}
+  .field{margin-bottom:12px;}
+  .field label{display:block; font-size:0.85rem; color:var(--muted); margin-bottom:5px;}
+  .field input{width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--line); background:transparent; color:var(--ink); font-family:inherit; font-size:0.95rem;}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  @media (max-width:560px){ .row2{grid-template-columns:1fr;} }
+  .btn{display:inline-flex; align-items:center; gap:8px; padding:12px 22px; border-radius:8px; font-weight:700; font-size:0.92rem; border:none; cursor:pointer; font-family:inherit;}
+  .btn-primary{background:var(--teal); color:#04140F;}
+  .btn-primary:disabled{opacity:0.5; cursor:not-allowed;}
+  .btn-ghost{background:transparent; border:1px solid var(--line); color:var(--ink);}
+  .stage{border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-bottom:12px; border-inline-start:3px solid var(--gray); display:none;}
+  .stage.show{display:block;}
+  .stage h3{font-size:0.95rem; margin:0 0 6px;}
+  .stage p{font-size:0.88rem; color:var(--muted); white-space:pre-wrap; margin:0;}
+  .tone-blue{border-inline-start-color:var(--blue);} .tone-purple{border-inline-start-color:var(--purple);}
+  .tone-teal{border-inline-start-color:var(--teal);} .tone-coral{border-inline-start-color:var(--coral);}
+  .status{font-size:0.85rem; color:var(--muted); margin-bottom:12px;}
+  .hidden{display:none;}
+  .approved{color:var(--teal); font-weight:700;}
+  .err{color:var(--coral); font-size:0.88rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>مدار — لوحة التشغيل الفعلية</h1>
+  <p class="sub">هذه اللوحة تتحدث مباشرة مع الخادم الحقيقي وقاعدة البيانات — كل ما تراه هنا فعلي وليس تجريبيًا.</p>
+
+  <div class="panel" id="setupPanel">
+    <h2>١. بيانات الحملة</h2>
+    <div class="row2">
+      <div class="field"><label>اسم المؤسسة</label><input id="orgName" placeholder="مثال: شركة درب"></div>
+      <div class="field"><label>اسم العلامة</label><input id="brandName" placeholder="مثال: قهوة درب"></div>
+    </div>
+    <div class="field"><label>اسم الحملة</label><input id="campaignName" placeholder="مثال: حملة إطلاق الخريف"></div>
+    <div class="row2">
+      <div class="field"><label>هدف الحملة</label><input id="goal" placeholder="مثال: زيادة الطلبات عبر التطبيق"></div>
+      <div class="field"><label>الجمهور المستهدف</label><input id="audience" placeholder="مثال: شباب 20-35 في الرياض"></div>
+    </div>
+    <div class="field"><label>السوق</label><input id="market" placeholder="مثال: السعودية"></div>
+    <button class="btn btn-primary" id="runBtn">إنشاء الحملة وتشغيل الحلقة</button>
+    <div class="err hidden" id="setupErr"></div>
+  </div>
+
+  <div class="panel hidden" id="progressPanel">
+    <h2>٢. الحلقة قيد التنفيذ</h2>
+    <div class="status" id="statusLine">جارٍ الاتصال بالخادم…</div>
+    <div class="stage tone-blue" id="s-brand"><h3>ذكاء العلامة</h3><p></p></div>
+    <div class="stage tone-blue" id="s-market"><h3>ذكاء السوق</h3><p></p></div>
+    <div class="stage tone-purple" id="s-hub"><h3>مركز الوكلاء (دمج)</h3><p></p></div>
+    <div class="stage tone-purple" id="s-orch"><h3>المنسّق</h3><p></p></div>
+    <div class="stage tone-teal" id="s-strategy"><h3>الاستراتيجية</h3><p></p></div>
+    <div class="stage tone-teal" id="s-creative"><h3>الإبداع</h3><p></p></div>
+    <div class="stage tone-teal" id="s-media"><h3>الوسائط</h3><p></p></div>
+    <div class="stage tone-coral" id="s-brief"><h3>بريف الحملة النهائي</h3><p></p></div>
+    <div class="stage tone-coral" id="s-analytics"><h3>التحليلات المتوقعة</h3><p></p></div>
+    <div class="stage tone-coral" id="s-optimization"><h3>توصيات التحسين</h3><p></p></div>
+  </div>
+
+  <div class="panel hidden" id="govPanel">
+    <h2>٣. الموافقة والتنزيل</h2>
+    <div class="row2">
+      <div class="field"><label>بريدك الإلكتروني</label><input id="approverEmail" placeholder="you@example.com"></div>
+      <div class="field"><label>اسمك</label><input id="approverName" placeholder="اسمك"></div>
+    </div>
+    <button class="btn btn-primary" id="approveBtn">✅ الموافقة والنشر</button>
+    <button class="btn btn-ghost" id="downloadBtn">⬇️ تنزيل البريف</button>
+    <div id="approvedTag" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<script>
+let lastRunId = null, lastBrief = '';
+
+function showStage(id, text){ const el = document.getElementById(id); el.classList.add('show'); el.querySelector('p').textContent = text; }
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const orgName = document.getElementById('orgName').value.trim();
+  const brandName = document.getElementById('brandName').value.trim();
+  const campaignName = document.getElementById('campaignName').value.trim();
+  const goal = document.getElementById('goal').value.trim();
+  const audience = document.getElementById('audience').value.trim();
+  const market = document.getElementById('market').value.trim();
+  const errEl = document.getElementById('setupErr');
+  errEl.classList.add('hidden');
+
+  if(!orgName || !brandName || !campaignName || !goal){
+    errEl.textContent = 'رجاءً عبّئ المؤسسة والعلامة والحملة والهدف على الأقل.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('progressPanel').classList.remove('hidden');
+  document.getElementById('statusLine').textContent = 'جارٍ إنشاء الحملة…';
+
+  try{
+    const setupRes = await fetch('/api/setup', {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({orgName, brandName, campaignName, goal, targetAudience:audience, market})
+    });
+    const setup = await setupRes.json();
+    if(!setupRes.ok) throw new Error(setup.error || 'تعذّر إنشاء الحملة');
+
+    document.getElementById('statusLine').textContent = 'جارٍ تشغيل الحلقة (قد يأخذ 20-40 ثانية)…';
+
+    const runRes = await fetch(`/api/campaigns/${setup.campaignId}/run`, { method:'POST' });
+    const run = await runRes.json();
+    if(!runRes.ok) throw new Error(run.error || 'تعذّر تشغيل الحلقة');
+
+    lastRunId = run.runId;
+    lastBrief = run.brief;
+
+    showStage('s-brand', run.brandIntel);
+    showStage('s-market', run.marketIntel);
+    showStage('s-hub', run.hub);
+    showStage('s-orch', `استراتيجية ${run.decision.strategy}% — إبداع ${run.decision.creative}% — وسائط ${run.decision.media}%\n${run.decision.reason||''}`);
+    showStage('s-strategy', run.strategy);
+    showStage('s-creative', run.creative);
+    showStage('s-media', run.media);
+    showStage('s-brief', run.brief);
+    showStage('s-analytics', run.analytics);
+    showStage('s-optimization', run.optimization);
+
+    document.getElementById('statusLine').textContent = 'اكتملت الحلقة ✓';
+    document.getElementById('govPanel').classList.remove('hidden');
+  }catch(e){
+    document.getElementById('statusLine').textContent = '';
+    errEl.textContent = 'خطأ: ' + e.message;
+    errEl.classList.remove('hidden');
+  }finally{
+    document.getElementById('runBtn').disabled = false;
+  }
+});
+
+document.getElementById('approveBtn').addEventListener('click', async () => {
+  const approverEmail = document.getElementById('approverEmail').value.trim();
+  const approverName = document.getElementById('approverName').value.trim();
+  if(!approverEmail || !lastRunId) return;
+  try{
+    const res = await fetch(`/api/runs/${lastRunId}/approve`, {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({approverEmail, approverName})
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error);
+    document.getElementById('approvedTag').innerHTML = '<span class="approved">✅ تمت الموافقة والنشر فعليًا في قاعدة البيانات.</span>';
+  }catch(e){
+    document.getElementById('approvedTag').innerHTML = '<span class="err">تعذّرت الموافقة: '+e.message+'</span>';
+  }
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if(!lastBrief) return;
+  const blob = new Blob([lastBrief], {type:'text/plain;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'brief-campaign.txt';
+  a.click();
+});
+</script>
+</body>
+</html>
+
