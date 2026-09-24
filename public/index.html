@@ -91,6 +91,25 @@
 <script>
 let lastRunId = null, lastBrief = '';
 
+function getToken(){
+  let t = sessionStorage.getItem('appToken');
+  if(!t){
+    t = prompt('أدخل رمز الوصول الخاص باللوحة:');
+    if(t) sessionStorage.setItem('appToken', t);
+  }
+  return t || '';
+}
+
+async function apiFetch(url, options = {}) {
+  const headers = Object.assign({}, options.headers, { 'x-app-token': getToken() });
+  const res = await fetch(url, Object.assign({}, options, { headers }));
+  if(res.status === 401){
+    sessionStorage.removeItem('appToken');
+    throw new Error('رمز الوصول غير صحيح — أعد تحميل الصفحة وأدخله من جديد.');
+  }
+  return res;
+}
+
 function showStage(id, text){ const el = document.getElementById(id); el.classList.add('show'); el.querySelector('p').textContent = text; }
 
 document.getElementById('runBtn').addEventListener('click', async () => {
@@ -114,7 +133,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   document.getElementById('statusLine').textContent = 'جارٍ إنشاء الحملة…';
 
   try{
-    const setupRes = await fetch('/api/setup', {
+    const setupRes = await apiFetch('/api/setup', {
       method:'POST', headers:{'content-type':'application/json'},
       body: JSON.stringify({orgName, brandName, campaignName, goal, targetAudience:audience, market})
     });
@@ -123,7 +142,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
 
     document.getElementById('statusLine').textContent = 'جارٍ تشغيل الحلقة (قد يأخذ 20-40 ثانية)…';
 
-    const runRes = await fetch(`/api/campaigns/${setup.campaignId}/run`, { method:'POST' });
+    const runRes = await apiFetch(`/api/campaigns/${setup.campaignId}/run`, { method:'POST' });
     const run = await runRes.json();
     if(!runRes.ok) throw new Error(run.error || 'تعذّر تشغيل الحلقة');
 
@@ -157,7 +176,7 @@ document.getElementById('approveBtn').addEventListener('click', async () => {
   const approverName = document.getElementById('approverName').value.trim();
   if(!approverEmail || !lastRunId) return;
   try{
-    const res = await fetch(`/api/runs/${lastRunId}/approve`, {
+    const res = await apiFetch(`/api/runs/${lastRunId}/approve`, {
       method:'POST', headers:{'content-type':'application/json'},
       body: JSON.stringify({approverEmail, approverName})
     });
