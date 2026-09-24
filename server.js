@@ -36,7 +36,10 @@ app.use('/api', requireToken);
 // ---------------------------------------------------------------------------
 // طبقة النماذج: استدعاء DeepSeek فعليًا (صيغة متوافقة مع OpenAI)
 // ---------------------------------------------------------------------------
-async function askClaude(prompt, { json = false, maxTokens = 400 } = {}) {
+async function askClaude(prompt, { json = false, maxTokens = 400, system = null } = {}) {
+  const messages = [];
+  if (system) messages.push({ role: 'system', content: system });
+  messages.push({ role: 'user', content: prompt });
   const res = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
@@ -46,7 +49,7 @@ async function askClaude(prompt, { json = false, maxTokens = 400 } = {}) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
+      messages,
       ...(json ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
@@ -130,20 +133,25 @@ app.post('/api/campaigns/:campaignId/run', async (req, res) => {
   if (runErr) return res.status(500).json({ error: runErr.message });
 
   const ctx = `العلامة: ${campaign.name}\nالهدف: ${campaign.goal}\nالجمهور: ${campaign.target_audience || 'غير محدد'}\nالسوق: ${campaign.market || 'غير محدد'}`;
+  const QUALITY = 'ممنوع الكليشيهات والعبارات العامة الفضفاضة (مثل "نلبي احتياجات العملاء" أو "جودة عالية"). كل جملة يجب أن تحتوي رقمًا، مثالًا ملموسًا، أو تفصيلًا محددًا يمكن تنفيذه فعليًا. لو لم تتوفر معلومة كافية، اذكر افتراضًا معقولًا صراحة بدل الصياغة العامة.';
 
   try {
     const [brandIntel, marketIntel] = await Promise.all([
       runStage(run.id, 'brand_intelligence', { ctx }, () =>
-        askClaude(`أنت وكيل ذكاء العلامة. بناءً على:\n${ctx}\nاكتب 3 نقاط قصيرة عن تموضع العلامة. عربي، بلا مقدمات.`)),
+        askClaude(`بناءً على:\n${ctx}\nاكتب 3 نقاط قصيرة عن تموضع العلامة. عربي، بلا مقدمات.`,
+          { system: `أنت خبير تموضع علامات تجارية بخبرة 15 عامًا في السوق العربي. ${QUALITY}` })),
       runStage(run.id, 'market_intelligence', { ctx }, () =>
-        askClaude(`أنت وكيل ذكاء السوق. بناءً على:\n${ctx}\nاكتب 3 نقاط عن سلوك الجمهور والتوقيت المناسب. عربي، بلا مقدمات.`)),
+        askClaude(`بناءً على:\n${ctx}\nاكتب 3 نقاط عن سلوك الجمهور والتوقيت المناسب. عربي، بلا مقدمات.`,
+          { system: `أنت محلل سوق متخصص في سلوك المستهلك بالمنطقة العربية. ${QUALITY}` })),
     ]);
 
     const hub = await runStage(run.id, 'agent_hub', { brandIntel, marketIntel }, () =>
-      askClaude(`ادمج هذين المخرجين في 3 نقاط تشغيلية موحدة:\nالعلامة:\n${brandIntel}\nالسوق:\n${marketIntel}\nعربي، بلا مقدمات.`));
+      askClaude(`ادمج هذين المخرجين في 3 نقاط تشغيلية موحدة:\nالعلامة:\n${brandIntel}\nالسوق:\n${marketIntel}\nعربي، بلا مقدمات.`,
+        { system: `أنت منسّق عمليات يحوّل التحليلات إلى تعليمات تنفيذية مباشرة لفريق التنفيذ. ${QUALITY}` }));
 
     const decision = await runStage(run.id, 'orchestrator', { hub }, () =>
-      askClaude(`بناءً على:\n${hub}\nحدد توزيع أولوية (تجمع 100) بين استراتيجية/إبداع/وسائط. أعد فقط JSON: {"strategy":رقم,"creative":رقم,"media":رقم,"reason":"سبب قصير"}`, { json: true }));
+      askClaude(`بناءً على:\n${hub}\nحدد توزيع أولوية (تجمع 100) بين استراتيجية/إبداع/وسائط. أعد فقط JSON: {"strategy":رقم,"creative":رقم,"media":رقم,"reason":"سبب قصير"}`,
+        { json: true, system: 'أنت مدير تسويق مسؤول عن قرارات الميزانية، تبرر كل قرار بمنطق واضح مبني على المعطيات المُعطاة فقط.' }));
 
     await db.from('orchestrator_decisions').insert({
       run_id: run.id, strategy_weight: decision.strategy, creative_weight: decision.creative,
@@ -152,11 +160,14 @@ app.post('/api/campaigns/:campaignId/run', async (req, res) => {
 
     const [strategy, creative, media] = await Promise.all([
       runStage(run.id, 'strategy', { hub, decision }, () =>
-        askClaude(`أنت وكيل الاستراتيجية (أولوية ${decision.strategy}%). بناءً على:\n${hub}\nاكتب خطة من 3 خطوات. عربي، بلا مقدمات.`)),
+        askClaude(`أنت وكيل الاستراتيجية (أولوية ${decision.strategy}%). بناءً على:\n${hub}\nاكتب خطة من 3 خطوات. عربي، بلا مقدمات.`,
+          { system: `أنت استراتيجي حملات ينتج خططًا قابلة للتنفيذ خلال أسبوع، لا نظريات عامة. ${QUALITY}` })),
       runStage(run.id, 'creative', { hub, decision }, () =>
-        askClaude(`أنت وكيل الإبداع (أولوية ${decision.creative}%). بناءً على:\n${hub}\nاكتب فكرة رئيسية وجملة إعلانية واحدة. عربي، بلا مقدمات.`)),
+        askClaude(`أنت وكيل الإبداع (أولوية ${decision.creative}%). بناءً على:\n${hub}\nاكتب فكرة رئيسية وجملة إعلانية واحدة. عربي، بلا مقدمات.`,
+          { system: `أنت مدير إبداعي حائز جوائز، أسلوبك مباشر وغير متوقع، تتجنب القوالب الجاهزة تمامًا. ${QUALITY}`, maxTokens: 300 })),
       runStage(run.id, 'media', { hub, decision }, () =>
-        askClaude(`أنت وكيل الوسائط (أولوية ${decision.media}%). بناءً على:\n${hub}\nاقترح 3 قنوات مع سبب لكل واحدة. عربي، بلا مقدمات.`)),
+        askClaude(`أنت وكيل الوسائط (أولوية ${decision.media}%). بناءً على:\n${hub}\nاقترح 3 قنوات مع سبب لكل واحدة. عربي، بلا مقدمات.`,
+          { system: `أنت مخطط وسائط تعرف تكلفة وأداء كل قناة في السوق العربي تحديدًا. ${QUALITY}` })),
     ]);
 
     const production = await runStage(run.id, 'production', { strategy, creative, media }, () =>
