@@ -56,6 +56,12 @@
       <div class="field"><label>الجمهور المستهدف</label><input id="audience" placeholder="مثال: شباب 20-35 في الرياض"></div>
     </div>
     <div class="field"><label>السوق</label><input id="market" placeholder="مثال: السعودية"></div>
+    <h2 style="margin-top:20px;">١.ب حقول اختيارية (تحسّن جودة النتائج)</h2>
+    <div class="field"><label>نبرة العلامة</label><input id="brandTone" placeholder="مثال: جريئة وودودة، بلا رسمية زائدة"></div>
+    <div class="row2">
+      <div class="field"><label>أبرز المنافسين</label><input id="competitors" placeholder="مثال: علامة أ، علامة ب"></div>
+      <div class="field"><label>الميزة التنافسية</label><input id="usp" placeholder="مثال: توصيل خلال 20 دقيقة"></div>
+    </div>
     <button class="btn btn-primary" id="runBtn">إنشاء الحملة وتشغيل الحلقة</button>
     <div class="err hidden" id="setupErr"></div>
   </div>
@@ -119,6 +125,9 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   const goal = document.getElementById('goal').value.trim();
   const audience = document.getElementById('audience').value.trim();
   const market = document.getElementById('market').value.trim();
+  const brandTone = document.getElementById('brandTone').value.trim();
+  const competitors = document.getElementById('competitors').value.trim();
+  const uniqueSellingPoint = document.getElementById('usp').value.trim();
   const errEl = document.getElementById('setupErr');
   errEl.classList.add('hidden');
 
@@ -135,7 +144,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   try{
     const setupRes = await apiFetch('/api/setup', {
       method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({orgName, brandName, campaignName, goal, targetAudience:audience, market})
+      body: JSON.stringify({orgName, brandName, campaignName, goal, targetAudience:audience, market, brandTone, competitors, uniqueSellingPoint})
     });
     const setup = await setupRes.json();
     if(!setupRes.ok) throw new Error(setup.error || 'تعذّر إنشاء الحملة');
