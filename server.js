@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEEPSEEK_API_KEY, PORT = 3000 } = process.env;
+const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DEEPSEEK_API_KEY, APP_ACCESS_TOKEN, PORT = 3000 } = process.env;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !DEEPSEEK_API_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !DEEPSEEK_API_KEY || !APP_ACCESS_TOKEN) {
   console.error('انقص أحد المتغيرات في .env — راجع .env.example');
   process.exit(1);
 }
@@ -22,6 +22,16 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public'))); // يقدّم public/index.html على نفس النطاق (بلا مشاكل CORS)
 
 const MODEL = 'deepseek-chat'; // نموذج المحادثة العام في DeepSeek — راجع api-docs.deepseek.com لأي تحديثات
+
+// حماية بسيطة: أي طلب على /api/* يجب أن يحمل نفس الرمز السرّي المضبوط في متغيرات البيئة
+function requireToken(req, res, next) {
+  const provided = req.headers['x-app-token'];
+  if (!provided || provided !== APP_ACCESS_TOKEN) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  next();
+}
+app.use('/api', requireToken);
 
 // ---------------------------------------------------------------------------
 // طبقة النماذج: استدعاء DeepSeek فعليًا (صيغة متوافقة مع OpenAI)
