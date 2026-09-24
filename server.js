@@ -93,7 +93,7 @@ async function runStage(runId, stageKey, inputPayload, fn) {
 // POST /api/setup — ينشئ منظمة + علامة + حملة بطلب واحد (بديل الإدخال اليدوي)
 // ---------------------------------------------------------------------------
 app.post('/api/setup', async (req, res) => {
-  const { orgName, brandName, campaignName, goal, targetAudience, market } = req.body;
+  const { orgName, brandName, campaignName, goal, targetAudience, market, brandTone, competitors, uniqueSellingPoint } = req.body;
   if (!orgName || !brandName || !campaignName || !goal) {
     return res.status(400).json({ error: 'orgName, brandName, campaignName, goal مطلوبة' });
   }
@@ -105,10 +105,16 @@ app.post('/api/setup', async (req, res) => {
       .insert({ organization_id: org.id, name: brandName }).select().single();
     if (brandErr) throw brandErr;
 
+    const context = {};
+    if (brandTone) context.brandTone = brandTone;
+    if (competitors) context.competitors = competitors;
+    if (uniqueSellingPoint) context.uniqueSellingPoint = uniqueSellingPoint;
+
     const { data: campaign, error: campErr } = await db.from('campaigns')
       .insert({
         brand_id: brand.id, name: campaignName, goal,
         target_audience: targetAudience || null, market: market || null, status: 'active',
+        context: Object.keys(context).length ? context : null,
       }).select().single();
     if (campErr) throw campErr;
 
@@ -132,7 +138,11 @@ app.post('/api/campaigns/:campaignId/run', async (req, res) => {
     .from('pipeline_runs').insert({ campaign_id: campaignId, status: 'running' }).select().single();
   if (runErr) return res.status(500).json({ error: runErr.message });
 
-  const ctx = `العلامة: ${campaign.name}\nالهدف: ${campaign.goal}\nالجمهور: ${campaign.target_audience || 'غير محدد'}\nالسوق: ${campaign.market || 'غير محدد'}`;
+  const extra = campaign.context || {};
+  const ctx = `العلامة: ${campaign.name}\nالهدف: ${campaign.goal}\nالجمهور: ${campaign.target_audience || 'غير محدد'}\nالسوق: ${campaign.market || 'غير محدد'}`
+    + (extra.brandTone ? `\nنبرة العلامة: ${extra.brandTone}` : '')
+    + (extra.competitors ? `\nأبرز المنافسين: ${extra.competitors}` : '')
+    + (extra.uniqueSellingPoint ? `\nالميزة التنافسية: ${extra.uniqueSellingPoint}` : '');
   const QUALITY = 'ممنوع الكليشيهات والعبارات العامة الفضفاضة (مثل "نلبي احتياجات العملاء" أو "جودة عالية"). كل جملة يجب أن تحتوي رقمًا، مثالًا ملموسًا، أو تفصيلًا محددًا يمكن تنفيذه فعليًا. لو لم تتوفر معلومة كافية، اذكر افتراضًا معقولًا صراحة بدل الصياغة العامة.';
 
   try {
