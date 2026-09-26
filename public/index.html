@@ -62,6 +62,7 @@
       <div class="field"><label>أبرز المنافسين</label><input id="competitors" placeholder="مثال: علامة أ، علامة ب"></div>
       <div class="field"><label>الميزة التنافسية</label><input id="usp" placeholder="مثال: توصيل خلال 20 دقيقة"></div>
     </div>
+    <div class="field"><label>بيانات أداء حقيقية سابقة (اختياري — الأهم لدقة النتائج)</label><input id="pastPerformance" placeholder="مثال: حملة سابقة حققت 400 طلب بميزانية 3000 ريال"></div>
     <button class="btn btn-primary" id="runBtn">إنشاء الحملة وتشغيل الحلقة</button>
     <div class="err hidden" id="setupErr"></div>
   </div>
@@ -128,6 +129,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   const brandTone = document.getElementById('brandTone').value.trim();
   const competitors = document.getElementById('competitors').value.trim();
   const uniqueSellingPoint = document.getElementById('usp').value.trim();
+  const pastPerformance = document.getElementById('pastPerformance').value.trim();
   const errEl = document.getElementById('setupErr');
   errEl.classList.add('hidden');
 
@@ -144,7 +146,7 @@ document.getElementById('runBtn').addEventListener('click', async () => {
   try{
     const setupRes = await apiFetch('/api/setup', {
       method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({orgName, brandName, campaignName, goal, targetAudience:audience, market, brandTone, competitors, uniqueSellingPoint})
+      body: JSON.stringify({orgName, brandName, campaignName, goal, targetAudience:audience, market, brandTone, competitors, uniqueSellingPoint, pastPerformance})
     });
     const setup = await setupRes.json();
     if(!setupRes.ok) throw new Error(setup.error || 'تعذّر إنشاء الحملة');
